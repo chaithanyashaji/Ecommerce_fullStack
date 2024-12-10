@@ -2,6 +2,7 @@ import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import Stripe from 'stripe'
 import razorpay from 'razorpay'
+import { sendMail } from '../services/emailService.js';
 
 
 
@@ -26,13 +27,13 @@ const placeOrder = async (req,res) =>{
 
     try {
         
-            const {userId,items,amount,address} = req.body;
+            const {userId,items,amount,address,email} = req.body;
             const orderData ={
                 userId,
                 items,
                 amount,
                 address,
-                
+                email,
                 paymentMethod:"COD",
                 payment:false,
                 date:Date.now()
@@ -58,11 +59,12 @@ const placeOrder = async (req,res) =>{
 const placeOrderStripe = async (req,res) =>{
 
     try {
-        const {userId,items,amount,address} = req.body;
+        const {userId,items,amount,address,email} = req.body;
         const {origin} = req.headers
         const orderData ={
             userId,
             items,
+            email,
             amount,
             address,
             paymentMethod:"Stripe",
@@ -117,25 +119,54 @@ const placeOrderStripe = async (req,res) =>{
 
 //Verify Stripe
 const verifyStripe = async (req, res) => {
-    const{orderId,success,userId} = req.body
+    const { orderId, success, userId } = req.body;
+
     try {
-        
-        if(success==="true"){
-            await orderModel.findByIdAndUpdate(orderId, {payment:true});
-            await userModel.findByIdAndUpdate(userId, {cartData:{}})
-            res.json({success:true});
-        }else{
-            await orderModel.findByIdAndDelete(orderId)
-            res.json({success:false});
+        if (success === "true") {
+            const updatedOrder = await orderModel.findByIdAndUpdate(orderId, { payment: true }, { new: true });
+            await userModel.findByIdAndUpdate(userId, { cartData: {} });
+            const { items, amount, address } = updatedOrder;
+
+            // Extract email from the address field
+            const { email, street,city,state,country,zipcode } = address;
+
+            const itemSummary = items.map((item) => `${item.name} (x${item.quantity})`).join(', ');
+            const emailText = `Dear User,
+Thank you for your purchase! We are pleased to inform you that your payment for Order ID: ${orderId} has been successfully received.
+            
+Here are your order details:
+            
+------------------------------------------
+Items: ${itemSummary}
+Total Amount: ₹${amount}
+------------------------------------------
+            
+Shipping Address:
+${street}, ${city}, ${state}, ${country}, ${zipcode}
+            
+------------------------------------------
+            
+Thank you for shopping with us!
+            
+Best regards,
+Forever
+`;
+            
+
+            // Send email
+            await sendMail(email, 'Payment Confirmation', emailText);
+
+            res.json({ success: true });
+        } else {
+            await orderModel.findByIdAndDelete(orderId);
+            res.json({ success: false });
         }
-
     } catch (error) {
-
-        console.log(error)
-        res.json({success:false,message:error.message})
-        
+        console.error(error);
+        res.json({ success: false, message: error.message });
     }
-}
+};
+
 
 //placing order using Razorpay
 
@@ -181,35 +212,68 @@ const placeOrderRazorpay = async (req,res) =>{
 
 const verifyRazorpay = async (req, res) => {
     try {
-      const { userId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  
-      // Fetch order details from Razorpay
-      const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id);
-  
-      if (orderInfo.status === 'paid') {
-        // Verify signature (important for security)
-        const crypto = await import("crypto");
-        const generatedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-          .digest("hex");
-  
-        if (generatedSignature !== razorpay_signature) {
-          return res.json({ success: false, message: "Signature verification failed" });
+        const { userId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+        // Fetch order details from Razorpay
+        const orderInfo = await razorpayInstance.orders.fetch(razorpay_order_id);
+
+        if (orderInfo.status === 'paid') {
+            // Verify signature
+            const crypto = await import("crypto");
+            const generatedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+                .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+                .digest("hex");
+
+            if (generatedSignature !== razorpay_signature) {
+                return res.json({ success: false, message: "Signature verification failed" });
+            }
+
+            // Update order in the database
+            const updatedOrder = await orderModel.findByIdAndUpdate(orderInfo.receipt, { payment: true }, { new: true });
+            await userModel.findByIdAndUpdate(userId, { cartData: {} });
+
+            const { items, amount, address } = updatedOrder;
+            const { email, street, city, state, country, zipcode } = address;
+
+            const itemSummary = items.map((item) => `• ${item.name} (x${item.quantity})`).join('\n');
+
+            const emailHTML = `
+            <p>Dear ${email.split('@')[0]},</p>  
+            <p>Thank you for your order! Your payment for <strong>Order ID: ${orderInfo.receipt}</strong> has been successfully received.</p>  
+            
+            <h3>Order Details:</h3>
+            <ul>
+                <li><strong>Order ID:</strong> ${orderInfo.receipt}</li>  
+                <li><strong>Payment Status:</strong> Paid</li>  
+                <li><strong>Total Amount:</strong> ₹${amount.toFixed(2)}</li>  
+            </ul>
+            
+            <h3>Items Purchased:</h3>
+            <ul>
+                ${items.map((item) => `<li>${item.name} (x${item.quantity})</li>`).join('')}
+            </ul>
+            
+            <h3>Shipping Address:</h3>
+            <p>${street}, ${city}, ${state}, ${country} - ${zipcode}</p>  
+            
+            <p>If you have any questions about your order, feel free to contact our support team.</p>  
+            
+            <p><strong>Thank you for shopping with us!</strong></p>  
+            <p>Best regards,<br><strong>Forever Team</strong></p>
+            `;
+            await sendMail(email, 'Payment Confirmation', emailHTML, true);
+
+            return res.json({ success: true, message: "Payment successful" });
+        } else {
+            res.json({ success: false, message: "Payment not completed" });
         }
-  
-        // Update order in database
-        await orderModel.findByIdAndUpdate(orderInfo.receipt, { payment: true });
-        await userModel.findByIdAndUpdate(userId, { cartData: {} });
-  
-        return res.json({ success: true, message: "Payment successful" });
-      } else {
-        res.json({ success: false, message: "Payment not completed" });
-      }
     } catch (error) {
-      console.log(error);
-      res.json({ success: false, message: error.message });
+        console.log(error);
+        res.json({ success: false, message: error.message });
     }
-  };
+};
+
+
   
 //all orders data displAY for admin
 
