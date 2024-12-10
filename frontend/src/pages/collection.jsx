@@ -47,22 +47,31 @@ const Collection = () => {
     setFilterProducts(productsCopy)
   }
 
-  const sortProduct = () =>{
-    let fpCopy= filterProducts.slice();
-    switch(sortType){
+  const sortProduct = () => {
+    let fpCopy = [...filterProducts]; // Create a copy of the filtered products
+    switch (sortType) {
       case 'low-high':
-        setFilterProducts(fpCopy.sort((a,b)=>(a.price-b.price)));
+        setFilterProducts(fpCopy.sort((a, b) => a.price - b.price));
         break;
-
+  
       case 'high-low':
-        setFilterProducts(fpCopy.sort((a,b)=>(b.price-a.price)));
+        setFilterProducts(fpCopy.sort((a, b) => b.price - a.price));
         break;
-
+  
+      case 'rating':
+        setFilterProducts(
+          fpCopy.sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0))
+        );
+        break;
+  
       default:
-        applyFilter();
+        applyFilter(); // Fall back to the filtered list
         break;
     }
-  }
+  };
+  
+
+  
 
   useEffect(() =>{
   applyFilter();
@@ -142,13 +151,14 @@ const Collection = () => {
         <option value="relavant">Sort by: Relevant</option>
         <option value="low-high">Sort by: Low to High</option>
         <option value="high-low">Sort by: High to Low</option>
+        <option value="rating">Sort by: Rating</option>
       </select>
       </div>
       {/*Map products*/}
       <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 gap-y-6'>
         {
           filterProducts.map((item,index)=>(
-          <ProductItem key={index} name={item.name} id={item._id} price={item.price} image={item.image} />
+          <ProductItem key={index} name={item.name} id={item._id} price={item.price} image={item.image} rating={item.averageRating||0} />
         ))}
       </div>
       

@@ -11,7 +11,9 @@ const productSchema = new mongoose.Schema({
     subCategory: { type: String, required: true },
     sizes : {type: Array, required: true},
     date:{type:Number, required: true},
-    reviews: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Review' }]
+    reviews: [{ type: mongoose.Schema.Types.ObjectId, ref: 'review' }],
+    averageRating: { type: Number, default: 0 },
+    totalReviews: { type: Number, default: 0 },
 })
 
 const productModel = mongoose.models.product || mongoose.model('product', productSchema);

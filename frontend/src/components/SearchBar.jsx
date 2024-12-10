@@ -2,6 +2,7 @@ import React,{useContext,useState,useEffect} from 'react'
 import { ShopContext } from '../context/shopcontext'
 import { assets } from '../assets/assets';
 import { useLoaderData, useLocation } from 'react-router-dom';
+import { FaSearch, FaTimes } from "react-icons/fa";
 
 const SearchBar = () => {
 
@@ -19,14 +20,27 @@ const SearchBar = () => {
     },
       [location])
   return showSearch && visible ? (
-    <div className='border-t border-b bg-gray-50 text-center'>
-        <div className='inline-flex items-center justify-center border border-gray-400 px-5 py-2 my-5 mx-3 rounded-full w-3/4 sm:w-1/2'>
-        <input value={search} onChange={(e)=>setSearch(e.target.value)}className = 'flex-1 outline-none bg-inherit text-sm'type='text' placeholder='Search'/>
-        <img className='w-4' src={assets.search_icon}/>
-        </div>
-        <img onClick={()=>setShowSearch(false)}className='inline w-3 cursor-pointer' src={assets.cross_icon}/>
-      
-    </div>
+    <div className="border-t border-b py-5 flex justify-center">
+  <div className="relative w-11/12 sm:w-1/2">
+    {/* Search Input */}
+    <input
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+      className="w-full py-2 px-4 pl-10 pr-12 rounded-full border border-gray-300 shadow-sm focus:outline-none focus:ring-1 focus:ring-red-300 focus:border-red-300 text-sm"
+      type="text"
+      placeholder="Search for products..."
+    />
+    
+    {/* Search Icon */}
+    <FaSearch className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
+
+    {/* Close Icon */}
+    <FaTimes
+      onClick={() => setShowSearch(false)}
+      className="absolute right-3 top-2.5 text-gray-500 w-5 h-5 cursor-pointer hover:text-red-500 transition ease-in-out"
+    />
+  </div>
+</div>
   ) : null
 }
 
